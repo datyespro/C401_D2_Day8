@@ -1,7 +1,7 @@
 # Architecture — RAG Pipeline (Day 08 Lab)
 
 > **Tác giả (Documentation Owner):** Nguyễn Anh Đức (M6)
-> **Cập nhật lần cuối:** _(điền ngày hoàn thành)_
+> **Cập nhật lần cuối:** 14/04/2026
 
 ---
 
@@ -32,31 +32,27 @@ Nhóm xây trợ lý nội bộ cho **khối CS + IT Helpdesk** phục vụ nhâ
 
 | File | Nguồn (source metadata) | Department | Số chunk |
 |------|------------------------|------------|---------|
-| `policy_refund_v4.txt` | policy/refund-v4.pdf | CS | <!-- ⚠️ ĐIỀN SAU: chạy list_chunks() để lấy số --> |
-| `sla_p1_2026.txt` | support/sla-p1-2026.pdf | IT | <!-- ⚠️ ĐIỀN SAU --> |
-| `access_control_sop.txt` | it/access-control-sop.md | IT Security | <!-- ⚠️ ĐIỀN SAU --> |
-| `it_helpdesk_faq.txt` | support/helpdesk-faq.md | IT | <!-- ⚠️ ĐIỀN SAU --> |
-| `hr_leave_policy.txt` | hr/leave-policy-2026.pdf | HR | <!-- ⚠️ ĐIỀN SAU --> |
-
-> ⚠️ **[Phụ thuộc M2]** Điền số chunk sau khi `build_index()` chạy xong: `python index.py` → `list_chunks()`
+| `policy_refund_v4.txt` | policy/refund-v4.pdf | CS | 4 |
+| `sla_p1_2026.txt` | support/sla-p1-2026.pdf | IT | 3 |
+| `access_control_sop.txt` | it/access-control-sop.md | IT Security | 5 |
+| `it_helpdesk_faq.txt` | support/helpdesk-faq.md | IT | 6 |
+| `hr_leave_policy.txt` | hr/leave-policy-2026.pdf | HR | 3 |
 
 ### Quyết định chunking
 
 | Tham số | Giá trị | Lý do |
 |---------|---------|-------|
-| Chunk size | <!-- ⚠️ ĐIỀN SAU: M2 quyết định --> tokens | <!-- ⚠️ ĐIỀN SAU --> |
-| Overlap | <!-- ⚠️ ĐIỀN SAU --> tokens | Tránh cắt đứt câu điều khoản quan trọng |
-| Chunking strategy | Heading-based / section `===` | Tài liệu policy chia theo điều khoản → split theo `===` giữ nguyên ngữ cảnh |
-| Metadata fields | `source`, `section`, `effective_date`, `department`, `access` | Phục vụ filter freshness, citation, audit |
-
-> ⚠️ **[Phụ thuộc M2]** Điền chunk size và overlap chính xác sau khi xem code `index.py`
+| Chunk size | 512 tokens | Tối ưu hóa cho ngữ cảnh văn bản hành chính/policy, không quá dài để giảm nhiễu. |
+| Overlap | 100 tokens | Tránh cắt đứt câu điều khoản quan trọng, duy trì flow ý tưởng giữa các chunk. |
+| Chunking strategy | Paragraph-aware / Dấu chấm | Tài liệu policy chia theo điều khoản → split theo ranh giới tự nhiên giữ nguyên ngữ cảnh. |
+| Metadata fields | `source`, `section`, `effective_date`, `department`, `access` | Phục vụ filter freshness, citation, audit. |
 
 ### Embedding model
 
-- **Model**: <!-- ⚠️ ĐIỀN SAU: OpenAI text-embedding-3-small hoặc paraphrase-multilingual-MiniLM-L12-v2 — do M2 chọn -->
+- **Model**: OpenAI (`text-embedding-3-small`)
 - **Vector store**: ChromaDB (PersistentClient)
 - **Similarity metric**: Cosine
-- **Số chiều vector**: <!-- ⚠️ ĐIỀN SAU: 1536 (OpenAI) / 384 (MiniLM) -->
+- **Số chiều vector**: 1536
 
 ---
 
@@ -76,16 +72,14 @@ Nhóm xây trợ lý nội bộ cho **khối CS + IT Helpdesk** phục vụ nhâ
 
 | Tham số | Giá trị | Thay đổi so với baseline |
 |---------|---------|--------------------------|
-| Strategy | <!-- ⚠️ ĐIỀN SAU: hybrid / dense --> | <!-- ⚠️ ĐIỀN SAU --> |
-| Top-k search | <!-- ⚠️ ĐIỀN SAU --> | <!-- ⚠️ ĐIỀN SAU --> |
-| Top-k select | <!-- ⚠️ ĐIỀN SAU --> | <!-- ⚠️ ĐIỀN SAU --> |
-| Rerank | <!-- ⚠️ ĐIỀN SAU: cross-encoder / MMR / False --> | <!-- ⚠️ ĐIỀN SAU --> |
-| Query transform | <!-- ⚠️ ĐIỀN SAU --> | <!-- ⚠️ ĐIỀN SAU --> |
-
-> ⚠️ **[Phụ thuộc M3]** Điền sau khi M3 (Hoàng Ngọc Anh) implement xong Sprint 3
+| Strategy | Hybrid (BM25 + Dense) | Thêm cơ chế tìm kiếm từ khóa |
+| Top-k search | 10 | Giữ nguyên |
+| Top-k select | 3 | Giữ nguyên |
+| Rerank | Rerank bằng LLM (Use_Rerank=True) | Bổ sung module Cross-Encoder / LLM re-rank |
+| Query transform | Query Expansion | LLM sinh ra các cách hỏi đồng nghĩa để rải độ bao phủ |
 
 **Lý do chọn variant này:**
-> <!-- ⚠️ ĐIỀN SAU: Ví dụ: "Chọn hybrid vì corpus có cả câu tự nhiên (policy) lẫn mã lỗi như ERR-403-AUTH và tên riêng P1 ticket, dense bỏ lỡ exact keyword trong baseline." -->
+> "Chọn hybrid kết hợp vì corpus có cả ngôn ngữ tự nhiên dài (policy) lẫn mã lỗi/keyword chuẩn như ERR-403-AUTH và tên riêng P1 ticket. Dense hay bỏ lỡ exact keyword, nên việc có BM25 (Hybrid) bù đắp cực tốt cho Context Recall."
 
 ---
 
@@ -112,19 +106,17 @@ Answer:
 
 **Thiết kế 4 quy tắc chống ảo giác:**
 1. **Evidence-only** — `Answer only from the retrieved context`
-2. **Abstain** — `If context insufficient, say you do not know`
-3. **Citation** — Buộc cite `[1]`, `[2]` từ source metadata
-4. **Short/clear** — Giới hạn độ dài, tránh verbose
+2. **Abstain** — `Phân định rạch ròi 2 trường hợp: Không có data vs Có chính sách nhưng không đề cập ngoại lệ`.
+3. **Citation** — Buộc cite `[1]`, `[2]` từ source metadata.
+4. **Exact File Naming** — Ép nhắc đúng tên file mà không tự chèn thêm /path/directory dư thừa.
 
 ### LLM Configuration
 
 | Tham số | Giá trị |
 |---------|---------|
-| Model | <!-- ⚠️ ĐIỀN SAU: gpt-4o-mini / gemini-1.5-flash — do M4 chọn --> |
+| Model | gpt-4o-mini |
 | Temperature | 0 (để output ổn định, reproducible cho eval) |
 | Max tokens | 512 |
-
-> ⚠️ **[Phụ thuộc M4]** Điền tên model sau khi M4 (Đậu Văn Quyền) implement `call_llm()`
 
 ---
 
@@ -141,14 +133,12 @@ Answer:
 
 ### A/B Comparison — Kết quả tóm tắt
 
-> ⚠️ **[Phụ thuộc M5 + runtime]** Điền sau khi chạy `python eval.py`
-
 | Metric | Baseline (dense) | Variant | Delta |
 |--------|-----------------|---------|-------|
-| Faithfulness | <!-- ? --> /5 | <!-- ? --> /5 | <!-- +/- --> |
-| Answer Relevance | <!-- ? --> /5 | <!-- ? --> /5 | <!-- +/- --> |
-| Context Recall | <!-- ? --> /5 | <!-- ? --> /5 | <!-- +/- --> |
-| Completeness | <!-- ? --> /5 | <!-- ? --> /5 | <!-- +/- --> |
+| Faithfulness | 4.90 /5 | 4.90 /5 | ± 0.00 |
+| Answer Relevance | 4.40 /5 | 4.50 /5 | +0.10 |
+| Context Recall | 5.00 /5 | 5.00 /5 | ± 0.00 |
+| Completeness | 3.70 /5 | 3.90 /5 | +0.20 |
 
 ---
 
@@ -180,11 +170,11 @@ graph LR
     BM25 --> RRF["RRF Fusion"]
     RRF --> G
     G --> RERANK{"use_rerank?"}
-    RERANK -->|"True"| CE["Cross-Encoder Rerank"]
+    RERANK -->|"True"| CE["LLM / Cross-Encoder Rerank"]
     RERANK -->|"False"| CTX["Build Context Block"]
     CE --> CTX
     CTX --> P["Grounded Prompt\nEvidence-only + Abstain + Citation"]
-    P --> LLM["LLM\ngpt-4o-mini / gemini-flash"]
+    P --> LLM["LLM\ngpt-4o-mini"]
     LLM --> ANS["Answer + Citation [1][2]"]
     ANS --> EVAL["eval.py\nScorecard + A/B Compare"]
 ```
