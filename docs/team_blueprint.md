@@ -4,7 +4,20 @@
 
 ---
 
-## 1. M2: Data & Indexing Owner
+
+## M1: Tech Lead / Repo Manager
+**"Người cầm trịch hệ thống và phân phối mã nguồn"**
+
+- **File phụ trách:** `.env`, `.gitignore`, `requirements.txt` và bao quát nhánh `main`.
+- **Scope làm việc:** Thiết lập dự án ban đầu, chốt giao diện hàm giữa các file và merge code.
+- **Nhiệm vụ chính:**
+  Rà soát file gốc, chốt ranh giới đầu vào/đầu ra. Tách branch rẽ nhánh (feature branches) cho từng thành viên.
+  Duyệt Merge/Pull Request, giải quyết Xung đột (Conflict) code. 
+  Chạy End-to-End Test đảm bảo luồng nối từ `index.py` -> `rag_answer.py` -> `eval.py` trơn tru.
+
+---
+
+##  M2: Data & Indexing Owner (Nguyễn Hoàng Việt - 2A202600162)
 **"Người tạo khung lưu trữ Vector và chia nhỏ văn bản"**
 
 - **File phụ trách:** Duy nhất file `index.py`
@@ -17,7 +30,7 @@
 
 ---
 
-## 2. M3: Retrieval & Search Owner
+## M3: Retrieval & Search Owner (Hoàng Ngọc Anh)
 **"Người lục lọi tài liệu bằng toán học"**
 
 - **File phụ trách:** Nửa trên của file `rag_answer.py`
@@ -30,7 +43,7 @@
 
 ---
 
-## 3. M4: LLM Generation & Prompting
+## M4: LLM Generation & Prompting (Đậu Văn Quyền)
 **"Người chế tác Prompt và quản lý Bot trả lời"**
 
 - **File phụ trách:** Nửa dưới của file `rag_answer.py`
@@ -43,7 +56,7 @@
 
 ---
 
-## 4. M5: Test Data & Evaluation Engineer
+## M5: Test Data & Evaluation Engineer (2A202600460 - Vũ Duy Linh)
 **"Người cố gắng đập vỡ hệ thống bằng góc nhìn User"**
 
 - **File phụ trách:** `data/test_questions.json` và nửa đầu `eval.py`
@@ -54,7 +67,7 @@
 
 ---
 
-## 5. M6: Report & Architecture Documentation
+## M6: Report & Architecture Documentation 
 **"Người tổng hợp chiến dịch và phân tích số liệu A/B"**
 
 - **File phụ trách:** Nửa dưới `eval.py` và toàn bộ thư mục `docs/`.
