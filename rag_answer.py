@@ -27,14 +27,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Hỗ trợ in tiếng Việt trên Windows terminal
-import sys
-if sys.stdout.encoding != 'utf-8':
-    try:
-        sys.stdout.reconfigure(encoding='utf-8')
-    except AttributeError:
-        # Fallback cho Python cũ hơn 3.7
-        pass
+from utils.terminal import setup_terminal
+setup_terminal()
 
 # =============================================================================
 # CẤU HÌNH
