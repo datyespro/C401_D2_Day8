@@ -266,12 +266,46 @@ def rerank(
     - Dense/hybrid trả về nhiều chunk nhưng có noise
     - Muốn chắc chắn chỉ 3-5 chunk tốt nhất vào prompt
     """
-    from sentence_transformers import CrossEncoder
-    model = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
-    pairs = [[query, chunk["text"]] for chunk in candidates]
-    scores = model.predict(pairs)
-    ranked = sorted(zip(candidates, scores), key=lambda x: x[1], reverse=True)
-    return [chunk for chunk, _ in ranked[:top_k]]
+    if not candidates:
+        return []
+
+    # 1. Chuẩn bị danh sách chunks để LLM đánh giá
+    candidate_text = ""
+    for i, chunk in enumerate(candidates):
+        candidate_text += f"ID {i}: {chunk['text']}\n\n"
+
+    # 2. Xây dựng prompt yêu cầu LLM chọn ID
+    rerank_prompt = f"""
+    You are an expert relevance evaluator.
+    Given the following query and a list of candidate text chunks, identify the top {top_k} most relevant chunks that best answer the query.
+    Return ONLY the IDs as a comma-separated list in order of relevance (e.g. "2, 0, 5").
+    Do not include any explanation or other text.
+
+    Query: "{query}"
+
+    Candidates:
+    {candidate_text}
+
+    Top {top_k} IDs:"""
+
+    try:
+        # 3. Gọi LLM (sử dụng hàm call_llm đã có)
+        response = call_llm(rerank_prompt)
+        
+        # 4. Parse lấy các số ID ra từ response
+        import re
+        found_ids = [int(idx) for idx in re.findall(r'\d+', response)]
+        
+        # Lọc các ID hợp lệ và lấy top_k
+        valid_ids = [idx for idx in found_ids if 0 <= idx < len(candidates)]
+        if not valid_ids:
+            return candidates[:top_k]
+            
+        return [candidates[idx] for idx in valid_ids[:top_k]]
+        
+    except Exception as e:
+        print(f"[rerank] Lỗi LLM rerank: {e}. Fallback về top_k ban đầu.")
+        return candidates[:top_k]
 
 
 # =============================================================================
