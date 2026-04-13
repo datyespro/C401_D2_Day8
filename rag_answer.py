@@ -27,6 +27,15 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Hỗ trợ in tiếng Việt trên Windows terminal
+import sys
+if sys.stdout.encoding != 'utf-8':
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except AttributeError:
+        # Fallback cho Python cũ hơn 3.7
+        pass
+
 # =============================================================================
 # CẤU HÌNH
 # =============================================================================
@@ -350,22 +359,20 @@ def transform_query(query: str, strategy: str = "expansion") -> List[str]:
 def build_context_block(chunks: List[Dict[str, Any]]) -> str:
     """
     Đóng gói danh sách chunks thành context block để đưa vào prompt.
-
-    Format: structured snippets với source, section, score (từ slide).
-    Mỗi chunk có số thứ tự [1], [2], ... để model dễ trích dẫn.
+    Format: [1] Source | Section (Score)
+            Nội dung...
     """
     context_parts = []
     for i, chunk in enumerate(chunks, 1):
         meta = chunk.get("metadata", {})
         source = meta.get("source", "unknown")
-        section = meta.get("section", "")
+        section = meta.get("section", "N/A")
+        dept = meta.get("department", "N/A")
+        date = meta.get("effective_date", "N/A")
         score = chunk.get("score", 0)
         text = chunk.get("text", "")
 
-        # TODO: Tùy chỉnh format nếu muốn (thêm effective_date, department, ...)
-        header = f"[{i}] {source}"
-        if section:
-            header += f" | {section}"
+        header = f"[{i}] SOURCE: {source} | SECTION: {section} | DEPT: {dept} | DATE: {date}"
         if score > 0:
             header += f" | score={score:.2f}"
 
@@ -376,69 +383,49 @@ def build_context_block(chunks: List[Dict[str, Any]]) -> str:
 
 def build_grounded_prompt(query: str, context_block: str) -> str:
     """
-    Xây dựng grounded prompt theo 4 quy tắc từ slide:
-    1. Evidence-only: Chỉ trả lời từ retrieved context
-    2. Abstain: Thiếu context thì nói không đủ dữ liệu
-    3. Citation: Gắn source/section khi có thể
-    4. Short, clear, stable: Output ngắn, rõ, nhất quán
-
-    TODO Sprint 2:
-    Đây là prompt baseline. Trong Sprint 3, bạn có thể:
-    - Thêm hướng dẫn về format output (JSON, bullet points)
-    - Thêm ngôn ngữ phản hồi (tiếng Việt vs tiếng Anh)
-    - Điều chỉnh tone phù hợp với use case (CS helpdesk, IT support)
+    Xây dựng grounded prompt yêu cầu AI chỉ trả lời dựa trên context và trích dẫn nguồn.
     """
-    prompt = f"""Answer only from the retrieved context below.
-If the context is insufficient to answer the question, say you do not know and do not make up information.
-Cite the source field (in brackets like [1]) when possible.
-Keep your answer short, clear, and factual.
-Respond in the same language as the question.
+    prompt = f"""Bạn là một trợ lý AI thông minh phụ trách CS & IT Helpdesk của công ty. 
+Hãy trả lời câu hỏi dựa DUY NHẤT vào bối cảnh (Context) được cung cấp dưới đây.
 
-Question: {query}
+CÁC QUY TẮC BẮT BUỘC:
+1. EVIDENCE-ONLY: Chỉ sử dụng thông tin có trong Context. Không dùng kiến thức bên ngoài.
+2. ABSTAIN: Nếu Context không có đủ thông tin để trả lời, hãy nói thẳng: "Xin lỗi, dữ liệu hiện tại không đủ để trả lời câu hỏi này."
+3. CITATION: Luôn trích dẫn nguồn bằng cách đặt số thứ tự trong dấu ngoặc vuông tương ứng, ví dụ: [1], [2].
+4. TRÌNH BÀY: Nếu câu trả lời có nhiều ý, hãy sử dụng danh sách gạch đầu dòng (bullet points) cho rõ ràng.
+5. NGÔN NGỮ: Luôn trả lời bằng chính ngôn ngữ của câu hỏi.
 
-Context:
+BỐI CẢNH (CONTEXT):
 {context_block}
 
-Answer:"""
+CÂU HỎI: {query}
+
+CÂU TRẢ LỜI:"""
     return prompt
 
 
 def call_llm(prompt: str) -> str:
     """
-    Gọi LLM để sinh câu trả lời.
+    Gọi OpenAI API để sinh câu trả lời.
+    """
+    from openai import OpenAI
+    
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        return "LỖI: Chưa cấu hình OPENAI_API_KEY trong file .env"
 
-    TODO Sprint 2:
-    Chọn một trong hai:
-
-    Option A — OpenAI (cần OPENAI_API_KEY):
-        from openai import OpenAI
-        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    client = OpenAI(api_key=api_key)
+    try:
         response = client.chat.completions.create(
             model=LLM_MODEL,
             messages=[{"role": "user", "content": prompt}],
-            temperature=0,     # temperature=0 để output ổn định, dễ đánh giá
-            max_tokens=512,
+            temperature=0,  # Khóa độ sáng tạo để tránh ảo giác
+            max_tokens=1024,
         )
         return response.choices[0].message.content
+    except Exception as e:
+        return f"Lỗi khi gọi OpenAI API: {str(e)}"
 
-    Option B — Google Gemini (cần GOOGLE_API_KEY):
-        import google.generativeai as genai
-        genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
-        model = genai.GenerativeModel("gemini-1.5-flash")
-        response = model.generate_content(prompt)
-        return response.text
-
-    Lưu ý: Dùng temperature=0 hoặc thấp để output ổn định cho evaluation.
-    """
-    from openai import OpenAI
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-    response = client.chat.completions.create(
-        model=LLM_MODEL,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0,     # temperature=0 để output ổn định, dễ đánh giá
-        max_tokens=512,
-    )
-    return response.choices[0].message.content
 
 def rag_answer(
     query: str,
@@ -450,35 +437,6 @@ def rag_answer(
 ) -> Dict[str, Any]:
     """
     Pipeline RAG hoàn chỉnh: query → retrieve → (rerank) → generate.
-
-    Args:
-        query: Câu hỏi
-        retrieval_mode: "dense" | "sparse" | "hybrid"
-        top_k_search: Số chunk lấy từ vector store (search rộng)
-        top_k_select: Số chunk đưa vào prompt (sau rerank/select)
-        use_rerank: Có dùng cross-encoder rerank không
-        verbose: In thêm thông tin debug
-
-    Returns:
-        Dict với:
-          - "answer": câu trả lời grounded
-          - "sources": list source names trích dẫn
-          - "chunks_used": list chunks đã dùng
-          - "query": query gốc
-          - "config": cấu hình pipeline đã dùng
-
-    TODO Sprint 2 — Implement pipeline cơ bản:
-    1. Chọn retrieval function dựa theo retrieval_mode
-    2. Gọi rerank() nếu use_rerank=True
-    3. Truncate về top_k_select chunks
-    4. Build context block và grounded prompt
-    5. Gọi call_llm() để sinh câu trả lời
-    6. Trả về kết quả kèm metadata
-
-    TODO Sprint 3 — Thử các variant:
-    - Variant A: đổi retrieval_mode="hybrid"
-    - Variant B: bật use_rerank=True
-    - Variant C: thêm query transformation trước khi retrieve
     """
     config = {
         "retrieval_mode": retrieval_mode,
@@ -487,7 +445,7 @@ def rag_answer(
         "use_rerank": use_rerank,
     }
 
-    # --- Bước 1: Retrieve ---
+    # --- Bước 1: Retrieve (M3 đã implement) ---
     if retrieval_mode == "dense":
         candidates = retrieve_dense(query, top_k=top_k_search)
     elif retrieval_mode == "sparse":
@@ -509,17 +467,14 @@ def rag_answer(
     else:
         candidates = candidates[:top_k_select]
 
-    if verbose:
-        print(f"[RAG] After select: {len(candidates)} chunks")
-
-    # --- Bước 3: Build context và prompt ---
+    # --- Bước 3: Build context và prompt (M4) ---
     context_block = build_context_block(candidates)
     prompt = build_grounded_prompt(query, context_block)
 
     if verbose:
-        print(f"\n[RAG] Prompt:\n{prompt[:500]}...\n")
+        print(f"\n[RAG] Prompt:\n{prompt[:300]}...\n")
 
-    # --- Bước 4: Generate ---
+    # --- Bước 4: Generate (M4) ---
     answer = call_llm(prompt)
 
     # --- Bước 5: Extract sources ---
