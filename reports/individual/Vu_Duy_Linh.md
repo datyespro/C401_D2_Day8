@@ -53,6 +53,3 @@ Nếu có thêm thời gian, mục tiêu hàng đầu của tôi là cải tiế
 
 Cụ thể, tôi sẽ thử bổ sung luật cứng trực tiếp vào Prompt chấm điểm: "Nếu mẫu `expected_answer` mang tính chất abstain hoặc model trả lời từ chối do bị thiếu context, tuyệt đối cho 5/5 điểm thay vì 1/5." Điều này sẽ khắc phục tình trạng kết quả eval hiện nay cho thấy các câu hỏi nằm ngoài data (như Q09) đang bị giám khảo AI phạt vô cớ dù mô hình RAG hoạt động chuẩn xác 100%.
 
----
-
-*Lưu file này với tên: `reports/individual/Vu_Duy_Linh.md`*
