@@ -22,6 +22,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+from utils.terminal import setup_terminal
+setup_terminal()
+
 # =============================================================================
 # CẤU HÌNH
 # =============================================================================
