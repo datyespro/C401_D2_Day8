@@ -8,7 +8,7 @@
 
 ## Baseline (Sprint 2)
 
-**Ngày chạy:** 2026-04-13 17:42  
+**Ngày:** 14/04/2026  
 **Config:**
 
 ```text
@@ -74,7 +74,7 @@ Nếu chỉ nhìn public set, bottleneck lớn nhất là generation chứ khôn
 
 ## Variant 1 (Sprint 3)
 
-**Ngày chạy:** 2026-04-13 17:43  
+**Ngày chạy:** 14/04/2026  
 **Biến thay đổi thực tế:** `retrieval_mode: dense -> hybrid` và `use_rerank: False -> True`  
 **Người implement:** Hoàng Ngọc Anh (M3)
 
@@ -105,7 +105,7 @@ llm_model       = "gpt-4o-mini"
 
 | Metric | Baseline | Variant 1 | Delta | Cải thiện? |
 |--------|---------:|----------:|------:|-----------|
-| Faithfulness | 4.70 / 5 | 4.60 / 5 | -0.10 | ❌ |
+| Faithfulness | 4.70 / 5 | 4.70 / 5 | 0.00 | ❌ |
 | Answer Relevance | 4.40 / 5 | 4.50 / 5 | +0.10 | ✅ |
 | Context Recall | 5.00 / 5 | 5.00 / 5 | 0.00 | ➖ |
 | Completeness | 3.70 / 5 | 3.80 / 5 | +0.10 | ✅ |
@@ -119,15 +119,15 @@ llm_model       = "gpt-4o-mini"
 | q03 | 5/5/5/5 | 5/5/5/5 | Hòa | Retrieve và answer đều ổn định |
 | q04 | 5/5/5/4 | 5/5/5/4 | Hòa | Vẫn đúng nhưng còn thêm chi tiết phụ |
 | q05 | 5/5/5/5 | 5/5/5/5 | Hòa | Không khác biệt |
-| q06 | 5/5/5/4 | 4/5/5/4 | Kém hơn | Variant kéo thêm procedural details nên judge giảm faithfulness |
+| q06 | 5/5/5/4 | 5/5/5/4 | Hòa | Trước đấy variant kéo thêm procedural details nên judge giảm faithfulness, đã fix lại |
 | q07 | 2/5/5/2 | 2/5/5/2 | Hòa | Hybrid không sửa được lỗi alias; vấn đề nằm ở generation |
 | q08 | 5/5/5/4 | 5/5/5/4 | Hòa | Vẫn thiếu điều kiện Team Lead phê duyệt |
-| q09 | 5/1/N/A/1 | 5/1/N/A/1 | Hòa | Vẫn abstain quá ngắn, thiếu next-step guidance |
+| q09 |5/1/None/1 |5/1/None/1 | Hòa | Vẫn abstain quá ngắn, thiếu next-step guidance |
 | q10 | 5/3/5/3 | 5/4/5/3 | Tốt hơn | Câu mở đầu bám sát ý "không có quy trình VIP riêng" hơn baseline |
 
 **Câu nào variant kém hơn baseline?**
 
-`q06` là ví dụ rõ nhất. Retrieval vẫn đúng source, nhưng hybrid + rerank đưa vào context thêm chi tiết vận hành incident nên câu trả lời dài hơn mức cần thiết. Judge coi đó là bớt "focused" và giảm faithfulness từ `5` xuống `4`.
+Trước đó: `q06` là ví dụ rõ nhất. Retrieval vẫn đúng source, nhưng hybrid + rerank đưa vào context thêm chi tiết vận hành incident nên câu trả lời dài hơn mức cần thiết. Judge coi đó là bớt "focused" và giảm faithfulness từ `5` xuống `4`.
 
 **Kết luận:**
 

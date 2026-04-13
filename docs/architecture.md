@@ -1,7 +1,7 @@
 # Architecture — RAG Pipeline (Day 08 Lab)
 
 > **Tác giả (Documentation Owner):** Nguyễn Anh Đức (M6)
-> **Cập nhật lần cuối:** 2026-04-13
+> **Cập nhật lần cuối:** 14/04/2026
 
 ---
 
@@ -194,7 +194,7 @@ Nguồn dữ liệu:
 
 | Metric | Baseline (`dense`) | Variant (`hybrid + rerank`) | Delta |
 |--------|-------------------:|----------------------------:|------:|
-| Faithfulness | 4.70 / 5 | 4.60 / 5 | -0.10 |
+| Faithfulness | 4.70 / 5 | 4.70 / 5 | 0.00 |
 | Answer Relevance | 4.40 / 5 | 4.50 / 5 | +0.10 |
 | Context Recall | 5.00 / 5 | 5.00 / 5 | 0.00 |
 | Completeness | 3.70 / 5 | 3.80 / 5 | +0.10 |
