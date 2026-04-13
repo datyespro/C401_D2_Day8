@@ -2,80 +2,52 @@
 
 **Họ và tên:** Nguyễn Anh Đức  
 **Vai trò trong nhóm:** M6 — Report & Architecture Documentation Owner  
-**Ngày nộp:** _(điền ngày nộp)_  
-**Độ dài yêu cầu:** 500–800 từ
+**Ngày nộp:** 13/04/2026
 
 ---
 
 ## 1. Tôi đã làm gì trong lab này?
 
-Trong lab này, tôi đảm nhận vai trò **M6 — Documentation & Report Owner**, phụ trách hai phạm vi chính:
+Trong lab này, tôi phụ trách phần tài liệu kỹ thuật và luồng đánh giá cuối pipeline. Ở `eval.py`, tôi thêm `generate_grading_log()` để chạy `grading_questions.json`, ghi `logs/grading_run.json` đúng format trong `SCORING.md`, và bọc `try/except` theo từng câu để một query lỗi không làm hỏng cả batch. Tôi cũng bật luồng chạy variant scorecard và `compare_ab()` để repo xuất đủ scorecard và file A/B.
 
-**Phần code (`eval.py` từ dòng 210 trở xuống):**
-Tôi implement hàm `generate_grading_log()` — script tự động chạy pipeline với `grading_questions.json` và xuất kết quả theo đúng format `logs/grading_run.json` mà giảng viên yêu cầu. Script xử lý cả trường hợp pipeline crash từng câu (ghi `PIPELINE_ERROR`) để không làm mất điểm toàn bộ log. Tôi cũng kích hoạt (uncomment) phần chạy `run_scorecard(VARIANT_CONFIG)` và `compare_ab()`, đảm bảo luồng eval end-to-end `baseline → variant → A/B delta` hoạt động mượt khi M3/M4/M5 hoàn thành phần của họ.
-
-**Phần tài liệu (`docs/`):**
-Tôi xây dựng `architecture.md` mô tả toàn bộ kiến trúc pipeline từ indexing đến generation, kèm sơ đồ Mermaid và bảng failure mode checklist. Tôi soạn `tuning-log.md` với format per-question detail và bảng A/B comparison theo 4 metrics, với phân tích nguyên nhân (Error Tree) hỗ trợ team debug.
-
-Công việc của tôi kết nối trực tiếp với toàn bộ pipeline: phần log tôi tạo phụ thuộc output của M3+M4 (`rag_answer()`), phần scorecard phụ thuộc M5 (`score_*` functions), và phần tài liệu phản ánh quyết định kỹ thuật của M1+M2 (chunking, embedding model).
+Ở phần docs, tôi cập nhật `docs/architecture.md` và `docs/tuning-log.md` dựa trên code thật, scorecard và grading log. Vai trò của tôi là giữ cho phần “giải thích hệ thống” khớp với repo thực tế, không mô tả theo template cũ.
 
 ---
 
 ## 2. Điều tôi hiểu rõ hơn sau lab này
 
-**Về kiến trúc RAG và A/B testing:**
-Trước lab, tôi hiểu RAG theo lý thuyết gồm 3 bước Retrieve-Augment-Generate. Sau lab, tôi nhận ra việc đánh giá RAG khó hơn nhiều so với đánh giá ML thông thường — không có label duy nhất "đúng/sai", mà phải đánh giá theo 4 chiều độc lập: câu trả lời có bám context không (Faithfulness), có trả lời đúng câu hỏi không (Relevance), retriever có lấy về đúng nguồn không (Context Recall), và có đủ thông tin không (Completeness). Một pipeline có Faithfulness cao nhưng Context Recall thấp cho thấy lỗi nằm ở retrieval chứ không phải generation.
+Điều tôi hiểu rõ nhất sau lab là RAG không chỉ là “retrieve đúng rồi generate đúng”. Một pipeline có thể lấy đúng nguồn nhưng vẫn trả lời chưa tốt. Scorecard của nhóm cho thấy điều đó rõ: baseline đạt **Faithfulness 4.70/5** và **Context Recall 5.00/5**, nhưng **Completeness chỉ 3.70/5**. Nghĩa là hệ thống thường có đúng tài liệu trong tay, nhưng câu trả lời vẫn thiếu ý hoặc chốt vấn đề chưa đủ sắc.
 
-**Về A/B testing thực tế:**
-A/B Rule "chỉ đổi MỘT biến" nghe đơn giản nhưng thực tế rất dễ vi phạm. Khi team đổi đồng thời chunking + hybrid + rerank, không thể biết delta đến từ biến nào — đây là lỗi kinh điển trong thử nghiệm hệ thống AI. Việc ghi tuning log theo từng variant giúp trace lại được quyết định và justify kết quả.
+Tôi cũng hiểu sâu hơn ý nghĩa của A/B rule. Khi ghép công việc của cả nhóm, repo rất dễ rơi vào trạng thái đổi cùng lúc `retrieval_mode` và `use_rerank`. Nếu không ghi tuning log trung thực, team sẽ khó biết delta đến từ biến nào.
 
 ---
 
 ## 3. Điều tôi ngạc nhiên hoặc gặp khó khăn
 
-⚠️ **[Phụ thuộc runtime — ĐIỀN SAU khi chạy pipeline thực tế]**
+Điều làm tôi bất ngờ nhất là bottleneck của public test set không nằm ở retrieval như tôi dự đoán ban đầu. Tôi từng nghĩ dense search sẽ hụt vì corpus có alias và exact term, nhưng scorecard lại cho thấy **Context Recall đã bão hòa 5.00/5** trên 9 câu có expected source. Các câu yếu nhất (`q07`, `q09`, `q10`) chủ yếu hỏng ở generation: alias chưa rõ, abstain còn quá ngắn, hoặc special-case chưa chốt verdict ngay câu đầu.
 
-> Mô tả 1–2 điều xảy ra không đúng kỳ vọng khi chạy eval.py, ví dụ:
-> - "Tôi giả định Context Recall sẽ cao vì dense vector search, nhưng thực tế q07 (câu dùng alias 'approval matrix') cho recall = 1/5 vì embedded vector của alias và term gốc không đủ gần."
-> - "Hàm compare_ab() in đúng delta nhưng baseline và variant đều show *N/A* lần đầu vì M5 chưa implement score_faithfulness — phải chờ M5 xong mới có số liệu thực."
-> - "Grading log tưởng đơn giản nhưng phải xử lý edge case: nếu pipeline raise NotImplementedError giữa chừng, script dừng hoàn toàn → tôi thêm try/except từng câu để log các câu còn lại vẫn được ghi."
+Khó khăn thứ hai là phần eval/documentation phải luôn bám đúng sự thật của repo. Variant hiện tại hữu ích cho grading run, nhưng nó không phải A/B một biến thuần vì đổi đồng thời hybrid và rerank. Tôi phải ghi rõ cả điểm mạnh lẫn hạn chế này thay vì viết theo hướng “nghe hay”.
 
 ---
 
 ## 4. Phân tích một câu hỏi trong grading
 
-⚠️ **[Phụ thuộc runtime — ĐIỀN SAU khi grading_questions.json được public lúc 17:00]**
+Tôi chọn `gq07`: **“Công ty sẽ phạt bao nhiêu nếu team IT vi phạm cam kết SLA P1?”** Đây là câu rất quan trọng vì `SCORING.md` coi hallucination ở nhóm câu này là lỗi nặng.
 
-**Câu hỏi được chọn:** _(chọn 1 câu thú vị từ grading run)_
+Trong `logs/grading_run.json`, pipeline trả lời: **“Xin lỗi, dữ liệu hiện tại không đủ để trả lời câu hỏi này.”** Nguồn retrieve được vẫn là `support/sla-p1-2026.pdf`, số chunk dùng là `3`, và `retrieval_mode` là `hybrid`.
 
-**Phân tích theo Error Tree:**
+Theo Error Tree, tôi đánh giá:
 
-> Điền theo format sau đây (thay X, Y bằng số liệu thực):
->
-> **Baseline:** Faithfulness X/5 | Relevance X/5 | Context Recall X/5 | Completeness X/5  
->
-> **Lỗi nằm ở đâu:**
-> - Indexing: [có/không] — vì...
-> - Retrieval: [có/không] — vì...
-> - Generation: [có/không] — vì...
->
-> **Variant có cải thiện không:**
-> - Context Recall từ X/5 → Y/5 (+Z) nhờ...
-> - Hoặc: Không cải thiện vì...
->
-> **Root cause và fix đề xuất:**
-> "Pipeline fail ở bước [retrieval/generation] vì [nguyên nhân]. Fix cụ thể: [thay đổi gì]."
+- **Indexing: không lỗi.** Tài liệu SLA đã được index đúng, có version history và các section về P1.
+- **Retrieval: không lỗi.** Pipeline đã kéo về đúng tài liệu liên quan nhất cho câu hỏi.
+- **Generation: đúng hành vi mong muốn.** Trong tài liệu SLA không có điều khoản nào nói về “mức phạt” khi vi phạm cam kết, nên prompt evidence-only + abstain đã ngăn model bịa ra con số.
+
+Điểm hay của câu này là nó cho thấy một pipeline RAG tốt không phải lúc nào cũng “trả lời đầy đủ”, mà phải biết dừng đúng chỗ khi tài liệu không có dữ kiện. Nếu model tự suy luận kiểu “phạt 10%” hay “theo hợp đồng chuẩn”, nhóm sẽ bị trừ nặng vì hallucination. Nếu có thêm thời gian, tôi sẽ tinh chỉnh prompt để câu abstain mạnh hơn, ví dụ: **“Tài liệu hiện hành không nêu mức phạt khi vi phạm SLA P1”** thay vì chỉ nói chung chung là thiếu dữ liệu.
 
 ---
 
 ## 5. Nếu có thêm thời gian, tôi sẽ làm gì?
 
-⚠️ **[Điền sau khi có scorecard — phải có evidence từ kết quả thực tế]**
+Tôi sẽ ưu tiên hai việc. Thứ nhất, sửa prompt/answer template cho ba pattern đang kéo điểm xuống: alias tài liệu (`q07`), insufficient-context (`q09`), và special-case (`q10`). Đây là chỗ có evidence rõ nhất vì baseline chỉ đạt **Completeness 3.70/5** và variant mới lên **3.80/5**.
 
-> Đề xuất 1–2 cải tiến cụ thể, ví dụ:
->
-> **Cải tiến 1 — Implement LLM-as-Judge tự động:**  
-> Hiện tại `score_faithfulness()` và `score_completeness()` trả về `None` (chấm thủ công). Nếu có thêm giờ, tôi sẽ implement prompt LLM-as-Judge để tự động chấm, giúp scale evaluation lên 100+ câu mà không cần can thiệp thủ công. Theo SCORING.md, đây cũng trị giá +2 điểm bonus.
->
-> **Cải tiến 2 — [dựa trên scorecard thực tế]:**  
-> "Scorecard cho thấy X metric thấp nhất ở nhóm câu Y → tôi sẽ thử [query expansion / MMR rerank / metadata filter] theo cơ chế Z."
+Thứ hai, tôi sẽ tách lại thí nghiệm thành `hybrid-only`, `dense + rerank`, và `hybrid + rerank`. Hiện tại variant có cải thiện nhẹ, nhưng vì đổi hai biến cùng lúc nên chưa thể kết luận phần nào thực sự tạo ra delta.
