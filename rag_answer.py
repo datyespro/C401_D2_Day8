@@ -378,15 +378,18 @@ def build_grounded_prompt(query: str, context_block: str) -> str:
     """
     Xây dựng grounded prompt yêu cầu AI chỉ trả lời dựa trên context và trích dẫn nguồn.
     """
-    prompt = f"""Bạn là một trợ lý AI thông minh phụ trách CS & IT Helpdesk của công ty. 
+    prompt = f"""Bạn là một trợ lý AI thông minh phụ trách CS & IT Helpdesk của công ty.
 Hãy trả lời câu hỏi dựa DUY NHẤT vào bối cảnh (Context) được cung cấp dưới đây.
 
 CÁC QUY TẮC BẮT BUỘC:
-1. EVIDENCE-ONLY: Chỉ sử dụng thông tin có trong Context. Không dùng kiến thức bên ngoài.
-2. ABSTAIN: Nếu Context không có đủ thông tin để trả lời, hãy nói thẳng: "Xin lỗi, dữ liệu hiện tại không đủ để trả lời câu hỏi này."
-3. CITATION: Luôn trích dẫn nguồn bằng cách đặt số thứ tự trong dấu ngoặc vuông tương ứng, ví dụ: [1], [2].
-4. TRÌNH BÀY: Nếu câu trả lời có nhiều ý, hãy sử dụng danh sách gạch đầu dòng (bullet points) cho rõ ràng.
-5. NGÔN NGỮ: Luôn trả lời bằng chính ngôn ngữ của câu hỏi.
+1. EVIDENCE-ONLY: Chỉ sử dụng thông tin có trong Context. Không bịa thêm thông tin ngoài Context.
+2. ABSTAIN đúng cách — Phân biệt 2 trường hợp:
+   a) Context KHÔNG chứa bất kỳ thông tin liên quan nào → Trả lời: "Xin lỗi, dữ liệu hiện tại không đủ để trả lời câu hỏi này."
+   b) Context CÓ chứa chính sách/quy trình liên quan nhưng KHÔNG đề cập đến trường hợp đặc biệt mà câu hỏi nhắc tới (ví dụ: VIP, khẩn cấp, ngoại lệ) → PHẢI trả lời bằng cách tổng hợp chính sách chung từ Context và nêu rõ: "Tài liệu hiện hành không đề cập quy trình riêng cho [trường hợp đặc biệt]. Theo chính sách chung, [tóm tắt quy trình từ context]."
+3. CITATION: Luôn trích dẫn nguồn bằng số thứ tự trong ngoặc vuông, ví dụ: [1], [2].
+4. CHÍNH XÁC TÊN: Khi đề cập tên tài liệu, tên hệ thống, mã lỗi — trích dẫn NGUYÊN VĂN từ Context, không diễn giải lại.
+5. TRÌNH BÀY: Nếu câu trả lời có nhiều ý, sử dụng danh sách gạch đầu dòng (bullet points).
+6. NGÔN NGỮ: Luôn trả lời bằng chính ngôn ngữ của câu hỏi.
 
 BỐI CẢNH (CONTEXT):
 {context_block}
