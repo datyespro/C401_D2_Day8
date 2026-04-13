@@ -198,7 +198,7 @@ Nguồn dữ liệu:
 | Answer Relevance | 4.40 / 5 | 4.50 / 5 | +0.10 |
 | Context Recall | 5.00 / 5 | 5.00 / 5 | 0.00 |
 | Completeness | 3.70 / 5 | 3.80 / 5 | +0.10 |
-
+ 
 ### Kết luận ngắn từ scorecard
 
 - Public test set 10 câu cho thấy retrieval nền tảng đã khá tốt: `Context Recall = 5.0/5` trên toàn bộ 9 câu có `expected_sources`.

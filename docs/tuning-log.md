@@ -5,7 +5,7 @@
 > **Lưu ý run thực tế:** variant trong repo hiện tại đổi **hai biến cùng lúc** (`dense -> hybrid` và `use_rerank: False -> True`), nên phần kết luận dưới đây được ghi theo trạng thái chạy thật và có nêu rõ hạn chế.
 
 ---
-
+ 
 ## Baseline (Sprint 2)
 
 **Ngày:** 14/04/2026  
