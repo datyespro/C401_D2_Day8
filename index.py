@@ -39,6 +39,7 @@ CHUNK_OVERLAP = 80     # tokens overlap giữa các chunk
 _EMBEDDING_PROVIDER = None
 _OPENAI_CLIENT = None
 _SENTENCE_MODEL = None
+_EMBEDDING_MODEL_NAME = None
 
 
 # =============================================================================
@@ -313,36 +314,61 @@ def get_embedding(text: str) -> List[float]:
         model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
         return model.encode(text).tolist()
     """
-    global _EMBEDDING_PROVIDER, _OPENAI_CLIENT, _SENTENCE_MODEL
+    global _EMBEDDING_PROVIDER, _OPENAI_CLIENT, _SENTENCE_MODEL, _EMBEDDING_MODEL_NAME
 
     text = (text or "").strip()
     if not text:
         text = "empty"
 
     if _EMBEDDING_PROVIDER is None:
+        provider = os.getenv("EMBEDDING_PROVIDER", "local").strip().lower()
         openai_api_key = os.getenv("OPENAI_API_KEY")
 
-        if openai_api_key:
+        # Hỗ trợ alias provider từ .env
+        if provider in {"sentence-transformers", "sentence_transformers", "st"}:
+            provider = "local"
+        if provider not in {"openai", "local", "auto"}:
+            print(f"EMBEDDING_PROVIDER='{provider}' không hợp lệ. Dùng 'local' thay thế.")
+            provider = "local"
+
+        # auto: ưu tiên OpenAI nếu có API key, nếu không dùng local
+        if provider == "auto":
+            provider = "openai" if openai_api_key else "local"
+
+        if provider == "openai":
             try:
+                if not openai_api_key:
+                    raise ValueError("Thiếu OPENAI_API_KEY")
+
                 from openai import OpenAI
 
                 _OPENAI_CLIENT = OpenAI(api_key=openai_api_key)
                 _EMBEDDING_PROVIDER = "openai"
-                print("Embedding backend: OpenAI (text-embedding-3-small)")
+                _EMBEDDING_MODEL_NAME = (
+                    os.getenv("OPENAI_EMBEDDING_MODEL")
+                    or os.getenv("EMBEDDING_MODEL")
+                    or "text-embedding-3-small"
+                )
+                print(f"Embedding backend: OpenAI ({_EMBEDDING_MODEL_NAME})")
             except Exception as e:
                 print(f"Không thể khởi tạo OpenAI embeddings ({e}). Fallback sang local model.")
 
         if _EMBEDDING_PROVIDER is None:
             from sentence_transformers import SentenceTransformer
 
-            _SENTENCE_MODEL = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
             _EMBEDDING_PROVIDER = "sentence_transformers"
-            print("Embedding backend: SentenceTransformers (paraphrase-multilingual-MiniLM-L12-v2)")
+            _EMBEDDING_MODEL_NAME = (
+                os.getenv("LOCAL_EMBEDDING_MODEL")
+                or os.getenv("EMBEDDING_MODEL")
+                or "paraphrase-multilingual-MiniLM-L12-v2"
+            )
+            _SENTENCE_MODEL = SentenceTransformer(_EMBEDDING_MODEL_NAME)
+            print(f"Embedding backend: SentenceTransformers ({_EMBEDDING_MODEL_NAME})")
 
     if _EMBEDDING_PROVIDER == "openai":
         response = _OPENAI_CLIENT.embeddings.create(
             input=text,
-            model="text-embedding-3-small",
+            model=_EMBEDDING_MODEL_NAME,
         )
         return response.data[0].embedding
 
