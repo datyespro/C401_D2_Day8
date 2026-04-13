@@ -5,7 +5,7 @@
 ---
 
 
-## M1: Tech Lead / Repo Manager
+## M1: Tech Lead / Repo Manager (Nguyễn Thành Đạt)
 **"Người cầm trịch hệ thống và phân phối mã nguồn"**
 
 - **File phụ trách:** `.env`, `.gitignore`, `requirements.txt` và bao quát nhánh `main`.
@@ -67,7 +67,7 @@
 
 ---
 
-## M6: Report & Architecture Documentation 
+## M6: Report & Architecture Documentation  (Nguyễn Anh Đức)
 **"Người tổng hợp chiến dịch và phân tích số liệu A/B"**
 
 - **File phụ trách:** Nửa dưới `eval.py` và toàn bộ thư mục `docs/`.
