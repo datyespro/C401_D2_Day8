@@ -31,8 +31,8 @@ CHROMA_DB_DIR = Path(__file__).parent / "chroma_db"
 
 # TODO Sprint 1: Điều chỉnh chunk size và overlap theo quyết định của nhóm
 # Gợi ý từ slide: chunk 300-500 tokens, overlap 50-80 tokens
-CHUNK_SIZE = 400       # tokens (ước lượng bằng số ký tự / 4)
-CHUNK_OVERLAP = 80     # tokens overlap giữa các chunk
+CHUNK_SIZE = 512       # tokens (ước lượng bằng số ký tự / 4)
+CHUNK_OVERLAP = 100     # tokens overlap giữa các chunk
 
 
 # Lazy-loaded embedding backend để tránh load model nhiều lần

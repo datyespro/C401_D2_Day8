@@ -8,7 +8,7 @@
 ## M1: Tech Lead / Repo Manager (Nguyễn Thành Đạt)
 **"Người cầm trịch hệ thống và phân phối mã nguồn"**
 
-- **File phụ trách:** `.env`, `.gitignore`, `requirements.txt` và bao quát nhánh `main`.
+- **File phụ trách:** `.env`, `requirements.txt` và bao quát nhánh `main`.
 - **Scope làm việc:** Thiết lập dự án ban đầu, chốt giao diện hàm giữa các file và merge code.
 - **Nhiệm vụ chính:**
   Rà soát file gốc, chốt ranh giới đầu vào/đầu ra. Tách branch rẽ nhánh (feature branches) cho từng thành viên.
