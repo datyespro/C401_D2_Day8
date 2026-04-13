@@ -1,156 +1,176 @@
 # Tuning Log — RAG Pipeline (Day 08 Lab)
 
-> **Tác giả (Documentation Owner):** Nguyễn Anh Đức (M6)  
-> **A/B Rule:** Chỉ đổi **MỘT biến** mỗi lần — không đổi đồng thời chunking + hybrid + rerank.
+> **Tác giả (Documentation Owner):** Nguyễn Anh Đức (M6)
+> **A/B Rule chuẩn:** Chỉ đổi **một biến** mỗi lần.
+> **Lưu ý run thực tế:** variant trong repo hiện tại đổi **hai biến cùng lúc** (`dense -> hybrid` và `use_rerank: False -> True`), nên phần kết luận dưới đây được ghi theo trạng thái chạy thật và có nêu rõ hạn chế.
 
 ---
 
 ## Baseline (Sprint 2)
 
-**Ngày:** _(điền ngày chạy)_  
+**Ngày chạy:** 2026-04-13 17:42  
 **Config:**
-```
+
+```text
 retrieval_mode  = "dense"
-chunk_size      = ⚠️ ĐIỀN SAU (xem index.py của M2)
-overlap         = ⚠️ ĐIỀN SAU
-embedding_model = ⚠️ ĐIỀN SAU (OpenAI / MiniLM)
+chunk_size      = 512
+overlap         = 100
+embedding_model = "text-embedding-3-small"
 top_k_search    = 10
 top_k_select    = 3
 use_rerank      = False
-llm_model       = ⚠️ ĐIỀN SAU (xem rag_answer.py của M4)
+llm_model       = "gpt-4o-mini"
 ```
 
 **Cách chấm điểm:**
-- [ ] Chấm thủ công (đọc answer và chunks, chấm theo thang 1–5)
-- [ ] LLM-as-Judge (M5 implement prompt chấm tự động)
+
+- [ ] Chấm thủ công
+- [x] LLM-as-Judge qua các prompt trong `prompt/prompt.md`
 
 **Scorecard Baseline:**
 
-> ⚠️ **[Phụ thuộc runtime]** Điền sau khi chạy: `python eval.py`
-
 | Metric | Average Score (1–5) | Số câu được chấm |
-|--------|--------------------|-----------------|
-| Faithfulness | \_\_\_ /5 | /10 |
-| Answer Relevance | \_\_\_ /5 | /10 |
-| Context Recall | \_\_\_ /5 | /10 |
-| Completeness | \_\_\_ /5 | /10 |
+|--------|--------------------:|-----------------:|
+| Faithfulness | 4.70 / 5 | 10 / 10 |
+| Answer Relevance | 4.40 / 5 | 10 / 10 |
+| Context Recall | 5.00 / 5 | 9 / 10 |
+| Completeness | 3.70 / 5 | 10 / 10 |
 
-**Per-question detail (điền sau khi chạy scorecard):**
+**Per-question detail:**
 
 | ID | Câu hỏi (tóm tắt) | F | AR | CR | C | Ghi chú |
-|----|------------------|---|----|----|---|---------|
-| q01 | | | | | | |
-| q02 | | | | | | |
-| q03 | | | | | | |
-| q04 | | | | | | |
-| q05 | | | | | | |
-| q06 | | | | | | |
-| q07 | | | | | | |
-| q08 | | | | | | |
-| q09 | | | | | | |
-| q10 | | | | | | |
+|----|-------------------|---:|---:|---:|---:|---------|
+| q01 | SLA ticket P1 | 5 | 5 | 5 | 4 | Trả đúng, nhưng thêm chi tiết escalation/stakeholder ngoài expected answer |
+| q02 | Số ngày được yêu cầu hoàn tiền | 5 | 5 | 5 | 5 | Ổn định, đúng trọng tâm |
+| q03 | Phê duyệt Level 3 | 5 | 5 | 5 | 5 | Retrieve và tổng hợp đúng |
+| q04 | Digital product có được refund không | 5 | 5 | 5 | 4 | Đúng ngoại lệ, nhưng diễn đạt chưa gọn bằng expected answer |
+| q05 | Số lần login sai trước khi khóa | 5 | 5 | 5 | 5 | Đúng hoàn toàn |
+| q06 | Escalation của P1 | 5 | 5 | 5 | 4 | Đúng trigger 10 phút nhưng lan sang full workflow |
+| q07 | "Approval Matrix" là tài liệu nào | 2 | 5 | 5 | 2 | Retrieve đúng doc nhưng answer không nói rõ alias tên cũ → tên mới |
+| q08 | Remote tối đa mấy ngày/tuần | 5 | 5 | 5 | 4 | Thiếu điều kiện Team Lead phê duyệt |
+| q09 | ERR-403-AUTH | 5 | 1 | N/A | 1 | Abstain đúng, nhưng không cho guidance liên hệ IT như expected answer |
+| q10 | Refund khẩn cấp cho VIP | 5 | 3 | 5 | 3 | Nêu quy trình chung nhưng chưa chốt rõ "không có flow VIP riêng" |
 
 > `F` = Faithfulness | `AR` = Answer Relevance | `CR` = Context Recall | `C` = Completeness
 
-**Câu hỏi yếu nhất (điểm thấp nhất):**
-> ⚠️ ĐIỀN SAU — Ví dụ: "q07 (Approval Matrix) — context_recall = 1/5 vì dense bỏ lỡ alias tên phòng ban."
+**Câu hỏi yếu nhất:**
+
+`q09` là câu thấp nhất toàn bộ scorecard vì đây là case "insufficient context": pipeline abstain đúng nên faithfulness vẫn cao, nhưng relevance/completeness thấp do expected answer muốn thêm guidance an toàn. Nếu chỉ xét các câu có tài liệu nguồn trong corpus, `q07` là câu yếu nhất vì lỗi nằm ở khâu diễn giải alias tên tài liệu, không phải retrieval.
 
 **Phân tích nguyên nhân (Error Tree):**
 
-Sau khi xem baseline results, tick vào giả thuyết đúng:
-
 - [ ] **Indexing:** Chunking cắt giữa điều khoản → mất ngữ cảnh
 - [ ] **Indexing:** Metadata thiếu `effective_date` → retrieval lấy version cũ
-- [ ] **Retrieval:** Dense bỏ lỡ exact keyword / alias / mã lỗi (ERR-xxx)
+- [ ] **Retrieval:** Dense bỏ lỡ exact keyword / alias / mã lỗi trên public set
 - [ ] **Retrieval:** Top-k quá ít → thiếu evidence cần thiết
-- [ ] **Generation:** Prompt không đủ grounding → model thêm thông tin ngoài context
-- [ ] **Generation:** Context quá dài → lost in the middle effect
+- [x] **Generation:** Prompt/answer format chưa xử lý tốt alias, special case, helpful abstain
+- [x] **Generation:** Context có lúc dài hơn nhu cầu thật → câu trả lời lan sang chi tiết phụ
 
 **Giả thuyết ưu tiên kiểm tra ở Sprint 3:**
-> ⚠️ ĐIỀN SAU — Ví dụ: "Chọn kiểm tra Retrieval (hybrid) vì q07, q09 đều dùng từ khóa kỹ thuật mà dense thường miss."
+
+Nếu chỉ nhìn public set, bottleneck lớn nhất là generation chứ không phải retrieval. Tuy nhiên để hoàn thành Sprint 3 và chuẩn bị cho hidden/grading questions có khả năng chứa alias, keyword kỹ thuật và truy vấn đa tài liệu, nhóm vẫn thử một variant retrieval-side là `hybrid + rerank`.
 
 ---
 
 ## Variant 1 (Sprint 3)
 
-> ⚠️ **[Phụ thuộc M3]** Thông tin về variant do M3 (Hoàng Ngọc Anh) implement và quyết định.  
-> Điền sau khi M3 xong Sprint 3.
-
-**Ngày:** _(điền ngày chạy)_  
-**Biến thay đổi duy nhất:** _(1 trong 3: hybrid / rerank / query transform)_  
+**Ngày chạy:** 2026-04-13 17:43  
+**Biến thay đổi thực tế:** `retrieval_mode: dense -> hybrid` và `use_rerank: False -> True`  
 **Người implement:** Hoàng Ngọc Anh (M3)
 
-**Lý do chọn biến này (evidence từ baseline):**
-> ⚠️ ĐIỀN SAU — Phải dựa trên số liệu từ baseline, ví dụ:  
-> "Chọn hybrid vì q07 (alias query) và q09 (ERR-403 mã lỗi) đều thất bại với dense (context_recall = 1/5).  
-> Corpus có cả ngôn ngữ tự nhiên (policy) lẫn mã lỗi kỹ thuật → BM25 giúp bắt exact keyword."
+**Lý do chọn variant này:**
+
+- Corpus có cả văn bản tự nhiên lẫn exact term như `P1`, `Level 3`, `VPN`, `store credit`.
+- Có alias/tên cũ của tài liệu: `"Approval Matrix for System Access"` trong `access_control_sop.txt`.
+- Hidden/grading questions thực tế có nhiều câu đa nguồn hoặc nhiều điều kiện ghép, ví dụ VPN + remote, temporary access trong incident P1, password expiry + reset.
+
+Nói ngắn gọn: public set chưa cho thấy retrieval đang fail, nhưng hidden set có khả năng cao làm lộ nhóm lỗi này nên variant được chọn theo hướng "an toàn cho grading".
 
 **Config thay đổi:**
-```
-# Biến thay đổi:
-retrieval_mode = "⚠️ ĐIỀN SAU"   # hybrid / dense
 
-# Các tham số GIỮ NGUYÊN như baseline (A/B Rule):
+```text
+retrieval_mode = "hybrid"
 top_k_search   = 10
 top_k_select   = 3
-use_rerank     = ⚠️ ĐIỀN SAU     # True / False
-# chunk_size, embedding_model, llm_model — KHÔNG thay đổi
+use_rerank     = True
+
+# Giữ nguyên:
+chunk_size      = 512
+overlap         = 100
+embedding_model = "text-embedding-3-small"
+llm_model       = "gpt-4o-mini"
 ```
 
 **Scorecard Variant 1 — So sánh với Baseline:**
 
-> ⚠️ ĐIỀN SAU — Sau khi chạy: `python eval.py` (phần variant đã được uncomment)
-
 | Metric | Baseline | Variant 1 | Delta | Cải thiện? |
-|--------|---------|-----------|-------|-----------|
-| Faithfulness | \_/5 | \_/5 | +/- \_ | ✅/❌ |
-| Answer Relevance | \_/5 | \_/5 | +/- \_ | ✅/❌ |
-| Context Recall | \_/5 | \_/5 | +/- \_ | ✅/❌ |
-| Completeness | \_/5 | \_/5 | +/- \_ | ✅/❌ |
+|--------|---------:|----------:|------:|-----------|
+| Faithfulness | 4.70 / 5 | 4.60 / 5 | -0.10 | ❌ |
+| Answer Relevance | 4.40 / 5 | 4.50 / 5 | +0.10 | ✅ |
+| Context Recall | 5.00 / 5 | 5.00 / 5 | 0.00 | ➖ |
+| Completeness | 3.70 / 5 | 3.80 / 5 | +0.10 | ✅ |
 
-**Per-question: Câu nào variant tốt hơn baseline?**
+**Per-question: câu nào variant tốt hơn baseline?**
 
-> ⚠️ ĐIỀN SAU — Ví dụ: "q07: baseline CR=1/5 → variant CR=4/5 (+3). Hybrid bắt được keyword 'P1 SLA penalty'."
+| ID | Baseline (F/AR/CR/C) | Variant (F/AR/CR/C) | Kết quả | Lý do |
+|----|----------------------|---------------------|---------|-------|
+| q01 | 5/5/5/4 | 5/5/5/5 | Tốt hơn | Variant trả gọn hơn, bao đủ hai ý chính: 15 phút và 4 giờ |
+| q02 | 5/5/5/5 | 5/5/5/5 | Hòa | Không khác biệt đáng kể |
+| q03 | 5/5/5/5 | 5/5/5/5 | Hòa | Retrieve và answer đều ổn định |
+| q04 | 5/5/5/4 | 5/5/5/4 | Hòa | Vẫn đúng nhưng còn thêm chi tiết phụ |
+| q05 | 5/5/5/5 | 5/5/5/5 | Hòa | Không khác biệt |
+| q06 | 5/5/5/4 | 4/5/5/4 | Kém hơn | Variant kéo thêm procedural details nên judge giảm faithfulness |
+| q07 | 2/5/5/2 | 2/5/5/2 | Hòa | Hybrid không sửa được lỗi alias; vấn đề nằm ở generation |
+| q08 | 5/5/5/4 | 5/5/5/4 | Hòa | Vẫn thiếu điều kiện Team Lead phê duyệt |
+| q09 | 5/1/N/A/1 | 5/1/N/A/1 | Hòa | Vẫn abstain quá ngắn, thiếu next-step guidance |
+| q10 | 5/3/5/3 | 5/4/5/3 | Tốt hơn | Câu mở đầu bám sát ý "không có quy trình VIP riêng" hơn baseline |
 
-| ID | Baseline (F/AR/CR/C) | Variant (F/AR/CR/C) | Variant tốt hơn? | Lý do |
-|----|---------------------|--------------------|--------------------|-------|
-| q01 | | | | |
-| q02 | | | | |
-| q03 | | | | |
-| q04 | | | | |
-| q05 | | | | |
-| q06 | | | | |
-| q07 | | | | |
-| q08 | | | | |
-| q09 | | | | |
-| q10 | | | | |
+**Câu nào variant kém hơn baseline?**
 
-**Câu nào variant KÉM HƠN baseline (nếu có)?**
-> ⚠️ ĐIỀN SAU — Ví dụ: "q03 Faithfulness giảm: hybrid lấy thêm chunks ít liên quan → context block lớn hơn → model bị confuse."
+`q06` là ví dụ rõ nhất. Retrieval vẫn đúng source, nhưng hybrid + rerank đưa vào context thêm chi tiết vận hành incident nên câu trả lời dài hơn mức cần thiết. Judge coi đó là bớt "focused" và giảm faithfulness từ `5` xuống `4`.
 
 **Kết luận:**
-> ⚠️ ĐIỀN SAU — Variant 1 có tốt hơn baseline không?  
-> Kết luận phải có: (1) bằng chứng số liệu, (2) câu hỏi cụ thể, (3) giải thích cơ chế.  
->  
-> Ví dụ: "Variant hybrid cải thiện Context Recall từ X/5 → Y/5 (+Z), đặc biệt ở các câu có keyword kỹ thuật  
-> (q07, q09). Faithfulness không thay đổi đáng kể (Δ = ±0.1), cho thấy việc tăng recall không làm  
-> giảm chất lượng generation. → **Chọn variant hybrid** làm config chính cho grading run."
+
+Variant `hybrid + rerank` **không tạo ra bước nhảy lớn** trên public scorecard:
+
+- Relevance tăng nhẹ `+0.10`
+- Completeness tăng nhẹ `+0.10`
+- Context Recall không đổi
+- Faithfulness giảm nhẹ `-0.10`
+
+Điều này cho thấy public set không còn là retrieval problem rõ rệt; recall đã bão hòa từ baseline. Tuy vậy, variant vẫn hữu ích ở góc độ vận hành vì hidden/grading questions có xu hướng nhiều keyword và multi-source hơn public set. Do run hiện tại đổi 2 biến cùng lúc, chưa thể kết luận phần cải thiện đến từ hybrid hay từ rerank.
+
+**Quyết định thực dụng cho repo hiện tại:** giữ `hybrid` làm retrieval mode cho grading run, nhưng ở vòng tối ưu tiếp theo cần tách lại thí nghiệm:
+
+1. `dense + rerank`
+2. `hybrid` không rerank
+3. `hybrid + rerank`
+
+Khi đó mới đo được biến nào thật sự có ích.
 
 ---
 
 ## Tóm tắt học được (Sprint 4)
 
-> ⚠️ ĐIỀN SAU — Sau khi hoàn thành evaluation.  
-> Trả lời 3 câu hỏi này giúp đạt "nhận xét sâu sắc" theo rubric SCORING.md
-
 **1. Lỗi phổ biến nhất trong pipeline này là gì?**
-> ⚠️ ĐIỀN SAU — Trả lời dựa trên scorecard thực tế.  
-> Gợi ý format: "X% câu hỏi thất bại do [lỗi], biểu hiện qua [metric thấp] ở [câu cụ thể]."
+
+Lỗi phổ biến nhất không phải "không retrieve ra đúng tài liệu" mà là **answer synthesis chưa đủ sắc**. Ở baseline có **7/10 câu** chưa đạt `Completeness = 5`, nổi bật là `q07`, `q09`, `q10`. Các lỗi lặp lại là:
+
+- không nêu rõ alias tên cũ ↔ tên mới,
+- abstain đúng nhưng chưa đưa ra hướng xử lý an toàn,
+- trả lời special-case chưa chốt verdict ngay dòng đầu.
 
 **2. Biến nào có tác động lớn nhất tới chất lượng?**
-> ⚠️ ĐIỀN SAU — So sánh delta của từng metric khi đổi variant.  
-> Gợi ý: "Đổi từ dense → hybrid tạo ra delta lớn nhất ở Context Recall (+X), trong khi rerank chỉ ảnh hưởng Faithfulness (+Y nhỏ)."
+
+Trên public set, không có biến retrieval nào tạo delta lớn. Variant `hybrid + rerank` chỉ cải thiện `Answer Relevance` và `Completeness` mỗi metric `+0.10`, trong khi `Context Recall` giữ nguyên `5.00/5`. Vì vậy, nếu ưu tiên tăng điểm nhanh ở vòng tiếp theo, tác động lớn nhất nhiều khả năng đến từ **prompting/answer formatting**, không phải mở rộng retrieval thêm nữa.
 
 **3. Nếu có thêm 1 giờ, nhóm sẽ thử gì tiếp theo?**
-> ⚠️ ĐIỀN SAU — Đề xuất cụ thể có evidence.  
-> Gợi ý: "Thử Query Expansion cho q06 (multi-hop) vì câu này hỏi về 2 điều kiện từ 2 docs khác nhau — dense và hybrid đều miss."
+
+Ba việc nên làm tiếp theo:
+
+1. Tách thí nghiệm `hybrid-only` và `rerank-only` để tuân thủ A/B rule.
+2. Sửa prompt cho 3 pattern đang lỗi:
+   - câu hỏi alias tài liệu phải trả cả tên cũ và tên mới,
+   - câu hỏi ngoài phạm vi phải abstain kèm next-step an toàn,
+   - câu hỏi special-case phải kết luận verdict ở câu đầu rồi mới nêu policy chung.
+3. Ràng buộc output theo template ngắn hơn để giảm tình trạng answer đưa quá nhiều chi tiết phụ như ở `q06` và `q10`.
