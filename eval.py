@@ -487,24 +487,31 @@ if __name__ == "__main__":
         baseline_results = []
 
     # --- Chạy Variant (sau khi Sprint 3 hoàn thành) ---
-    # TODO Sprint 4: Uncomment sau khi implement variant trong rag_answer.py
-    # print("\n--- Chạy Variant ---")
-    # variant_results = run_scorecard(
-    #     config=VARIANT_CONFIG,
-    #     test_questions=test_questions,
-    #     verbose=True,
-    # )
-    # variant_md = generate_scorecard_summary(variant_results, VARIANT_CONFIG["label"])
-    # (RESULTS_DIR / "scorecard_variant.md").write_text(variant_md, encoding="utf-8")
+    # [M6] Uncomment sau khi M3 implement xong variant trong rag_answer.py
+    print("\n--- Chạy Variant ---")
+    try:
+        variant_results = run_scorecard(
+            config=VARIANT_CONFIG,
+            test_questions=test_questions,
+            verbose=True,
+        )
+        variant_md = generate_scorecard_summary(variant_results, VARIANT_CONFIG["label"])
+        (RESULTS_DIR / "scorecard_variant.md").write_text(variant_md, encoding="utf-8")
+        print(f"\nScorecard variant lưu tại: {RESULTS_DIR / 'scorecard_variant.md'}")
+    except NotImplementedError:
+        print("Variant chưa implement. Hoàn thành Sprint 3 trước.")
+        variant_results = []
 
     # --- A/B Comparison ---
-    # TODO Sprint 4: Uncomment sau khi có cả baseline và variant
-    # if baseline_results and variant_results:
-    #     compare_ab(
-    #         baseline_results,
-    #         variant_results,
-    #         output_csv="ab_comparison.csv"
-    #     )
+    # [M6] Chạy so sánh khi cả baseline và variant đã có kết quả
+    if baseline_results and variant_results:
+        compare_ab(
+            baseline_results,
+            variant_results,
+            output_csv="ab_comparison.csv"
+        )
+    else:
+        print("\n[!] Chưa đủ dữ liệu để chạy A/B comparison (cần cả baseline và variant).")
 
     print("\n\nViệc cần làm Sprint 4:")
     print("  1. Hoàn thành Sprint 2 + 3 trước")
@@ -513,3 +520,113 @@ if __name__ == "__main__":
     print("  4. Chạy run_scorecard(VARIANT_CONFIG)")
     print("  5. Gọi compare_ab() để thấy delta")
     print("  6. Cập nhật docs/tuning-log.md với kết quả và nhận xét")
+
+
+# =============================================================================
+# GRADING LOG GENERATOR — [M6] Tạo logs/grading_run.json cho giảng viên
+# Chạy sau 17:00 khi grading_questions.json được public
+# Lệnh: python eval.py grading
+# =============================================================================
+
+def generate_grading_log(
+    grading_questions_path: str = "data/grading_questions.json",
+    output_path: str = "logs/grading_run.json",
+    config: Optional[Dict] = None,
+) -> None:
+    """
+    [M6] Chạy pipeline với grading_questions.json và tạo log theo format SCORING.md.
+
+    Format output bắt buộc:
+    [
+      {
+        "id": "gq01",
+        "question": "...",
+        "answer": "...",
+        "sources": [...],
+        "chunks_retrieved": 3,
+        "retrieval_mode": "hybrid",
+        "timestamp": "2026-04-12T17:23:45"
+      },
+      ...
+    ]
+
+    Lưu ý:
+      - Dùng config TỐT NHẤT của nhóm (thường là VARIANT_CONFIG)
+      - Phải chạy trong khung 17:00–18:00 để timestamp hợp lệ (+1 điểm bonus)
+      - Nếu pipeline crash ở 1 câu, ghi "answer": "PIPELINE_ERROR: [mô tả]"
+    """
+    if config is None:
+        config = VARIANT_CONFIG  # Dùng config tốt nhất
+
+    grading_path = Path(grading_questions_path)
+    if not grading_path.exists():
+        print(f"[!] Không tìm thấy {grading_questions_path}")
+        print("    File này sẽ được public lúc 17:00 hôm nay.")
+        return
+
+    with open(grading_path, "r", encoding="utf-8") as f:
+        questions = json.load(f)
+
+    print(f"\n{'='*60}")
+    print(f"Grading Run — {len(questions)} câu hỏi")
+    print(f"Config: {config}")
+    print('='*60)
+
+    log = []
+    for q in questions:
+        qid = q["id"]
+        question_text = q["question"]
+        print(f"\n[{qid}] {question_text}")
+
+        try:
+            result = rag_answer(
+                query=question_text,
+                retrieval_mode=config.get("retrieval_mode", "dense"),
+                top_k_search=config.get("top_k_search", 10),
+                top_k_select=config.get("top_k_select", 3),
+                use_rerank=config.get("use_rerank", False),
+                verbose=False,
+            )
+            answer = result["answer"]
+            sources = result.get("sources", [])
+            chunks_retrieved = len(result.get("chunks_used", []))
+            retrieval_mode = result.get("config", {}).get("retrieval_mode", config["retrieval_mode"])
+
+        except NotImplementedError as e:
+            answer = f"PIPELINE_ERROR: Pipeline chưa implement — {e}"
+            sources = []
+            chunks_retrieved = 0
+            retrieval_mode = config.get("retrieval_mode", "unknown")
+        except Exception as e:
+            answer = f"PIPELINE_ERROR: {e}"
+            sources = []
+            chunks_retrieved = 0
+            retrieval_mode = config.get("retrieval_mode", "unknown")
+
+        print(f"  → {answer[:120]}...")
+
+        log.append({
+            "id": qid,
+            "question": question_text,
+            "answer": answer,
+            "sources": sources,
+            "chunks_retrieved": chunks_retrieved,
+            "retrieval_mode": retrieval_mode,
+            "timestamp": datetime.now().isoformat(),
+        })
+
+    # Lưu log
+    output = Path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with open(output, "w", encoding="utf-8") as f:
+        json.dump(log, f, ensure_ascii=False, indent=2)
+
+    print(f"\n✅ Grading log đã lưu tại: {output}")
+    print(f"   Tổng {len(log)} câu | Thời gian: {datetime.now().strftime('%H:%M:%S')}")
+
+
+# Hỗ trợ chạy riêng grading mode:
+# python eval.py grading
+import sys
+if __name__ == "__main__" and len(sys.argv) > 1 and sys.argv[1] == "grading":
+    generate_grading_log()
