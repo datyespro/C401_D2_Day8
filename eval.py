@@ -19,10 +19,13 @@ A/B Rule (từ slide):
 
 import json
 import csv
+import os
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from datetime import datetime
+from openai import OpenAI
 from rag_answer import rag_answer
+from utils.load_prompt import load_prompt_from_md
 
 # =============================================================================
 # CẤU HÌNH
@@ -30,6 +33,15 @@ from rag_answer import rag_answer
 
 TEST_QUESTIONS_PATH = Path(__file__).parent / "data" / "test_questions.json"
 RESULTS_DIR = Path(__file__).parent / "results"
+PROMPT_PATH = Path(__file__).parent / "prompt" / "prompt.md"
+
+try:
+    FAITHFULNESS_PROMPT = load_prompt_from_md(PROMPT_PATH, "## FAITHFULNESS_PROMPT")
+    ANSWER_RELEVANCE_PROMPT = load_prompt_from_md(PROMPT_PATH, "## ANSWER_RELEVANCE_PROMPT")
+    COMPLETENESS_PROMPT = load_prompt_from_md(PROMPT_PATH, "## COMPLETENESS_PROMPT")
+except ValueError as e:
+    print(f"Warning: {e}")
+    FAITHFULNESS_PROMPT = ANSWER_RELEVANCE_PROMPT = COMPLETENESS_PROMPT = ""
 
 # Cấu hình baseline (Sprint 2)
 BASELINE_CONFIG = {
@@ -88,12 +100,30 @@ def score_faithfulness(
 
     Trả về dict với: score (1-5) và notes (lý do)
     """
-    # TODO Sprint 4: Implement scoring
-    # Tạm thời trả về None (yêu cầu chấm thủ công)
-    return {
-        "score": None,
-        "notes": "TODO: Chấm thủ công hoặc implement LLM-as-Judge",
-    }
+    if not chunks_used or not answer:
+        return {"score": 1, "notes": "No chunks retrieved or empty answer"}
+    
+    chunks_text_list = []
+    for i, c in enumerate(chunks_used, 1):
+        text = c.get("text", "")
+        chunks_text_list.append(f"[Chunk {i}]\n{text}")
+    chunks_text = "\n\n".join(chunks_text_list)
+    
+    formatted_prompt = FAITHFULNESS_PROMPT.format(chunks=chunks_text, answer=answer)
+    
+    try:
+        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        response = client.chat.completions.create(
+            model=os.getenv("LLM_MODEL", "gpt-4o-mini"),
+            messages=[{"role": "user", "content": formatted_prompt}],
+            response_format={ "type": "json_object" },
+            temperature=0
+        )
+        result_dict = json.loads(response.choices[0].message.content)
+        return {"score": int(result_dict.get("score", 1)), "notes": result_dict.get("reason", "No reason")}
+    except Exception as e:
+        print(f"Lỗi chấm Faithfulness LLM: {e}")
+        return {"score": None, "notes": f"Lỗi: {str(e)}"}
 
 
 def score_answer_relevance(
@@ -113,10 +143,24 @@ def score_answer_relevance(
 
     TODO Sprint 4: Implement tương tự score_faithfulness
     """
-    return {
-        "score": None,
-        "notes": "TODO: Implement score_answer_relevance",
-    }
+    if not answer or not query:
+        return {"score": 1, "notes": "Empty answer or query"}
+    
+    formatted_prompt = ANSWER_RELEVANCE_PROMPT.format(query=query, answer=answer)
+    
+    try:
+        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        response = client.chat.completions.create(
+            model=os.getenv("LLM_MODEL", "gpt-4o-mini"),
+            messages=[{"role": "user", "content": formatted_prompt}],
+            response_format={ "type": "json_object" },
+            temperature=0
+        )
+        result_dict = json.loads(response.choices[0].message.content)
+        return {"score": int(result_dict.get("score", 1)), "notes": result_dict.get("reason", "No reason")}
+    except Exception as e:
+        print(f"Lỗi chấm Relevance LLM: {e}")
+        return {"score": None, "notes": f"Lỗi: {str(e)}"}
 
 
 def score_context_recall(
@@ -198,10 +242,26 @@ def score_completeness(
          Rate completeness 1-5. Are all key points covered?
          Output: {'score': int, 'missing_points': [str]}"
     """
-    return {
-        "score": None,
-        "notes": "TODO: Implement score_completeness (so sánh với expected_answer)",
-    }
+    if not expected_answer:
+        return {"score": None, "notes": "Không có expected_answer để so sánh"}
+    if not answer:
+        return {"score": 1, "notes": "Empty answer"}
+        
+    formatted_prompt = COMPLETENESS_PROMPT.format(query=query, answer=answer, expected_answer=expected_answer)
+    
+    try:
+        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        response = client.chat.completions.create(
+            model=os.getenv("LLM_MODEL", "gpt-4o-mini"),
+            messages=[{"role": "user", "content": formatted_prompt}],
+            response_format={ "type": "json_object" },
+            temperature=0
+        )
+        result_dict = json.loads(response.choices[0].message.content)
+        return {"score": int(result_dict.get("score", 1)), "notes": result_dict.get("reason", "No reason")}
+    except Exception as e:
+        print(f"Lỗi chấm Completeness LLM: {e}")
+        return {"score": None, "notes": f"Lỗi: {str(e)}"}
 
 
 # =============================================================================
