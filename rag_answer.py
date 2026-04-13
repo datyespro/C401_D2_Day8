@@ -317,33 +317,32 @@ def rerank(
 
 def transform_query(query: str, strategy: str = "expansion") -> List[str]:
     """
-    Biến đổi query để tăng recall.
-
-    Strategies:
-      - "expansion": Thêm từ đồng nghĩa, alias, tên cũ
-      - "decomposition": Tách query phức tạp thành 2-3 sub-queries
-      - "hyde": Sinh câu trả lời giả (hypothetical document) để embed thay query
-
-    TODO Sprint 3 (nếu chọn query transformation):
-    Gọi LLM với prompt phù hợp với từng strategy.
-
-    Ví dụ expansion prompt:
-        "Given the query: '{query}'
-         Generate 2-3 alternative phrasings or related terms in Vietnamese.
-         Output as JSON array of strings."
-
-    Ví dụ decomposition:
-        "Break down this complex query into 2-3 simpler sub-queries: '{query}'
-         Output as JSON array."
-
-    Khi nào dùng:
-    - Expansion: query dùng alias/tên cũ (ví dụ: "Approval Matrix" → "Access Control SOP")
-    - Decomposition: query hỏi nhiều thứ một lúc
-    - HyDE: query mơ hồ, search theo nghĩa không hiệu quả
+    Biến đổi query để tăng recall bằng LLM (Query Expansion).
     """
-    # TODO Sprint 3: Implement query transformation
-    # Tạm thời trả về query gốc
-    return [query]
+    if strategy != "expansion":
+        return [query]
+
+    # 1. Prompt để sinh câu hỏi đồng nghĩa
+    prompt = f"""You are a search query optimizer. 
+Given the user query in Vietnamese: "{query}"
+Generate 2 variations of this query that use different synonyms or phrasing but have the same intent.
+Output ONLY the variations separated by commas. No other text.
+
+Variations:"""
+
+    try:
+        response = call_llm(prompt)
+        variations = [v.strip().strip('"') for v in response.split(",")]
+        
+        # Merge và de-duplicate
+        all_queries = [query]
+        for v in variations:
+            if v and v.lower() != query.lower():
+                all_queries.append(v)
+        return all_queries[:3]
+    except Exception as e:
+        print(f"[transform_query] Error: {e}")
+        return [query]
 
 
 # =============================================================================
@@ -430,6 +429,7 @@ def rag_answer(
     top_k_search: int = TOP_K_SEARCH,
     top_k_select: int = TOP_K_SELECT,
     use_rerank: bool = False,
+    use_expansion: bool = False,
     verbose: bool = False,
 ) -> Dict[str, Any]:
     """
@@ -440,21 +440,41 @@ def rag_answer(
         "top_k_search": top_k_search,
         "top_k_select": top_k_select,
         "use_rerank": use_rerank,
+        "use_expansion": use_expansion,
     }
 
-    # --- Bước 1: Retrieve (M3 đã implement) ---
-    if retrieval_mode == "dense":
-        candidates = retrieve_dense(query, top_k=top_k_search)
-    elif retrieval_mode == "sparse":
-        candidates = retrieve_sparse(query, top_k=top_k_search)
-    elif retrieval_mode == "hybrid":
-        candidates = retrieve_hybrid(query, top_k=top_k_search)
+    # --- Bước 0: Query Transformation (Sprint 3) ---
+    if use_expansion:
+        queries = transform_query(query, strategy="expansion")
+        if verbose:
+            print(f"[RAG] Expanded queries: {queries}")
     else:
-        raise ValueError(f"retrieval_mode không hợp lệ: {retrieval_mode}")
+        queries = [query]
+
+    # --- Bước 1: Retrieve (M3 đã implement) ---
+    all_candidates = []
+    for q in queries:
+        if retrieval_mode == "dense":
+            res = retrieve_dense(q, top_k=top_k_search)
+        elif retrieval_mode == "sparse":
+            res = retrieve_sparse(q, top_k=top_k_search)
+        elif retrieval_mode == "hybrid":
+            res = retrieve_hybrid(q, top_k=top_k_search)
+        else:
+            raise ValueError(f"retrieval_mode không hợp lệ: {retrieval_mode}")
+        all_candidates.extend(res)
+
+    # Khử trùng lặp (nếu nhiều query lấy cùng 1 chunk)
+    seen_text = set()
+    candidates = []
+    for c in all_candidates:
+        if c["text"] not in seen_text:
+            candidates.append(c)
+            seen_text.add(c["text"])
 
     if verbose:
         print(f"\n[RAG] Query: {query}")
-        print(f"[RAG] Retrieved {len(candidates)} candidates (mode={retrieval_mode})")
+        print(f"[RAG] Total unique candidates: {len(candidates)}")
         for i, c in enumerate(candidates[:3]):
             print(f"  [{i+1}] score={c.get('score', 0):.3f} | {c['metadata'].get('source', '?')}")
 
@@ -550,10 +570,15 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"Lỗi: {e}")
 
-    # Uncomment sau khi Sprint 3 hoàn thành:
-    # print("\n--- Sprint 3: So sánh strategies ---")
-    # compare_retrieval_strategies("Approval Matrix để cấp quyền là tài liệu nào?")
-    # compare_retrieval_strategies("ERR-403-AUTH")
+    print("\n--- Sprint 3: Test Query Expansion (Multi-Query) ---")
+    query_eco = "Quy định về remote work"
+    print(f"\nQuery: {query_eco} (Dùng từ 'remote' thay vì 'làm việc từ xa' trong doc)")
+    try:
+        result = rag_answer(query_eco, retrieval_mode="hybrid", use_expansion=True, verbose=True)
+        print(f"Answer: {result['answer']}")
+        print(f"Sources: {result['sources']}")
+    except Exception as e:
+        print(f"Lỗi: {e}")
 
     print("\n\nViệc cần làm Sprint 2:")
     print("  1. Implement retrieve_dense() — query ChromaDB")
