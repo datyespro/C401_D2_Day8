@@ -9,60 +9,37 @@
 
 ## 1. Tôi đã làm gì trong lab này? (100-150 từ)
 
-> Mô tả cụ thể phần bạn đóng góp vào pipeline:
-> - Sprint nào bạn chủ yếu làm?
-> - Cụ thể bạn implement hoặc quyết định điều gì?
-> - Công việc của bạn kết nối với phần của người khác như thế nào?
-
-_________________
+Với vai trò Tech Lead, tôi chịu trách nhiệm chính ở Sprint 1 (khởi tạo cấu trúc) và tham gia rà soát luồng dữ liệu toàn tuyến. Cụ thể, tôi thiết lập file `.gitignore` để chặn rò rỉ `.env` và thư mục `chroma_db/`, đồng thời thiết kế `team_blueprint.md`. Để đảm bảo 6 thành viên làm việc song song không bị Git Conflict (Surgical Changes), tôi đã chuẩn hóa giao thức đầu vào/ra của các hàm thành chuẩn `List[Dict]`.
+Ngoài ra, trong lúc debug hệ thống ở Sprint 4, tôi đã trực tiếp phân tích file `index.py` (cấu trúc chunking 512 tokens + regex metadata) và hỗ trợ M4 sửa lại hàm `build_grounded_prompt()` để vá lỗi mô hình bị quá an toàn (over-conservative) khi sinh câu trả lời, giúp điểm Completeness bật tăng từ 3.70 lên 3.90.
 
 ---
 
 ## 2. Điều tôi hiểu rõ hơn sau lab này (100-150 từ)
 
-> Chọn 1-2 concept từ bài học mà bạn thực sự hiểu rõ hơn sau khi làm lab.
-> Ví dụ: chunking, hybrid retrieval, grounded prompt, evaluation loop.
-> Giải thích bằng ngôn ngữ của bạn — không copy từ slide.
-
-_________________
+Khái niệm tôi thực sự "sáng mắt" ra sau Lab này là **Sự phân tách giữa Retrieval và Generation**. Ban đầu, tôi luôn nghĩ hễ mô hình trả lời sai hoặc bảo "Không biết" thì tự động là do Retrieval tìm kiếm dở.
+Qua việc soi điểm `score_context_recall` bằng 5 (100% tài liệu được moi lên đầy đủ) mà điểm `Completeness` lại chỉ đạt 1, tôi hiểu sâu sắc rằng: Retriever xịn đến mấy cũng vô nghĩa nếu bộ Prompt của khâu Generation (Grounded Prompt) thiết lập các rule bảo vệ (Guardrails) quá ngặt nghèo. Việc làm chủ LLM không chỉ ở vector search mà còn ở nghệ thuật "mớm lời" — phân nhánh rõ ràng các trường hợp Abstain (từ chối) thực sự với việc phải tổng hợp luật chung nếu gặp các case dị biệt (như case khách VIP chưa được định nghĩa).
 
 ---
 
 ## 3. Điều tôi ngạc nhiên hoặc gặp khó khăn (100-150 từ)
 
-> Điều gì xảy ra không đúng kỳ vọng?
-> Lỗi nào mất nhiều thời gian debug nhất?
-> Giả thuyết ban đầu của bạn là gì và thực tế ra sao?
-
-_________________
+Điều khiến tôi bất ngờ và mất thời gian debug nhất là **hiện tượng Evaluator (LLM-as-a-judge) chấm điểm oan**. Ở câu [Q09 - Lỗi ERR-403], dữ liệu thật sự không có trong DB. Mô hình AI của nhóm đã làm cực tốt và ngoan ngoãn khi trả lời đúng rule: *"Xin lỗi, không có dữ liệu"*. Thế nhưng judge lại phang điểm Relevance = 1 & Completeness = 1.
+Chúng tôi bị loay hoay với giả thuyết là Retriever bị hỏng, nhưng sau khi đào sâu vào cơ chế chấm, tôi nhận ra lỗ hổng nằm ở chính System prompt của Evaluator. Do chưa cover edge-case "Câu trả lời đúng của bài toán này là việc mày phải từ chối trả lời", giám khảo LLM cứ khăng khăng ép phải có info thì mới cho điểm cao, tạo ra nghịch lý Faithfulness = 5 nhưng Relevance = 1.
 
 ---
 
 ## 4. Phân tích một câu hỏi trong scorecard (150-200 từ)
 
-> Chọn 1 câu hỏi trong test_questions.json mà nhóm bạn thấy thú vị.
-> Phân tích:
-> - Baseline trả lời đúng hay sai? Điểm như thế nào?
-> - Lỗi nằm ở đâu: indexing / retrieval / generation?
-> - Variant có cải thiện không? Tại sao có/không?
-
-**Câu hỏi:** ___________
+**Câu hỏi:** [Q10] "Nếu cần hoàn tiền khẩn cấp cho khách hàng VIP, quy trình có khác không?"
 
 **Phân tích:**
-
-_________________
+- Ở cấu hình Baseline (Dense Search), hệ thống lấy được chính xác file `refund-v4.pdf` (Context Recall = 5). Tuy nhiên, model lại sinh ra câu: "Xin lỗi, dữ liệu hiện tại không đủ để trả lời", dẫn đến Relevance = 1 và Completeness = 1.
+- Sang cấu hình Variant (Hybrid + Re-rank), điểm số vẫn không cải thiện.
+- Lỗi nằm hoàn toàn ở khâu **Generation**. Bối cảnh (Context) có đầy đủ về quy trình hoàn tiền, nhưng vì không chứa đích danh từ khóa "VIP / khẩn cấp", model LLM đã bị rule `ABSTAIN` gốc kìm hãm, dẫn đến ảo tưởng là không có đủ dữ liệu.
+- Cách fix: Thay vì nhét thêm thuật toán tìm kiếm, tôi quyết định chia Rule ABSTAIN trong prompt thành 2 nhánh: Nếu hoàn toàn không có data thì mới từ chối; còn nếu có policy thì phải sinh ra câu: *"Tài liệu không phân biệt thẻ VIP, quy trình chung vẫn là..."*. Kết quả: Model đã trả lời trơn tru, logic.
 
 ---
 
 ## 5. Nếu có thêm thời gian, tôi sẽ làm gì? (50-100 từ)
 
-> 1-2 cải tiến cụ thể bạn muốn thử.
-> Không phải "làm tốt hơn chung chung" mà phải là:
-> "Tôi sẽ thử X vì kết quả eval cho thấy Y."
-
-_________________
-
----
-
-*Lưu file này với tên: `reports/individual/[ten_ban].md`*
-*Ví dụ: `reports/individual/nguyen_van_a.md`*
+Tôi sẽ ưu tiên sửa lại prompt của Evaluator (`score_completeness` và `score_answer_relevance` trong `eval.py`). Tôi sẽ lập trình thêm một filter: "Nếu mảng `expected_sources` là một danh sách rỗng, và Expected Answer mang ý nghĩa từ chối, hãy Auto Pass và cho model 5/5 điểm tuyệt đối nếu nó nói 'Không đủ dữ liệu'". Kết quả benchmark scorecard hiện nay chưa công bằng 100% cho khả năng từ chối ảo giác (Abstain) của model do chưa fix lỗi này.
